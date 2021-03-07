@@ -22,9 +22,22 @@ def resource_forbidden(exception):
     return jsonify(str(exception)), 403
 
 @application.route("/index.html")
-def default_index():
+def default_page():
     """Index page"""
     return make_response(render_template("index.html"), 200)
+
+@application.route("/",methods=["GET", "POST"])
+def req_handler():
+    """GET/POST requests handler"""
+    try:
+        if request.method == "GET":
+            return ''
+        if request.method == "POST":
+            return ''
+        return ''
+    except:
+        print("Error in req_handler()")
+        return abort(404)
 
 if __name__ == "__main__":
     application.run(threaded=True)
