@@ -37,8 +37,7 @@ def req_handler():
                     image.save(file_object, image.format)
                     file_object.seek(0)
                     return send_file(file_object, mimetype="*/*")
-                return make_response(render_template("thumbnail_info.html"), 200)
-        return make_response(render_template("index.html"), 200)
+                return make_response(render_template("thumbnail_info.html"), 200)        
     if request.method == "POST":
         new_thumbnail = thumbnail(location="/home/alien/Projects/cookie/img/cat.jpg", link="012", size="56000", mtype="image/jpeg", hash="None")
         db.session.add(new_thumbnail)
