@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+"""SIDNEY(COOKIE MONSTER) IMAGE MANAGER"""
 import os
 import io
 from PIL import Image
