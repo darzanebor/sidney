@@ -43,7 +43,7 @@ def captcha_verify():
 def get_image_mime(stream):
     """Get Mime Type from stream"""
     try:
-        mime = magic.from_buffer(stream.read(1024), mime=True)
+        mime = magic.from_buffer(stream.read(2048), mime=True)
         stream.seek(0)
         if mime == None:
             return None
