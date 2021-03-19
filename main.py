@@ -29,11 +29,9 @@ application.config["SIDNEY_COOKIE"] = "http://localhost:5001"
 application.config["XCAPTCHA_SITE_KEY"] = ""
 application.config["XCAPTCHA_SECRET_KEY"] = ""
 application.config["MAX_CONTENT_LENGTH"] = 1024 * 1024 * 10
-application.config["UPLOAD_EXTENSIONS"] = [".jpg", ".png", ".gif"]
 
 db = SQLAlchemy(application)
 xcaptcha = XCaptcha(application)
-
 
 def captcha_verify():
     """Verify Captcha"""
@@ -42,7 +40,6 @@ def captcha_verify():
     except:
         print("Error in captcha_verify()")
         return abort(500)
-
 
 def get_image_mime(stream):
     """Get Mime Type from stream"""
@@ -53,7 +50,6 @@ def get_image_mime(stream):
     except:
         print("Error in get_image_mime()")
         return abort(500)
-
 
 def image_to_object(image, image_format=None):
     """Convert Image to Object"""
@@ -82,7 +78,6 @@ def generate_link():
 def is_valid_url(url_list):
     """Validate url by regexp"""
     regex = re.compile(r"^((http|https)?(:\D{2})).*$", re.IGNORECASE)
-    # добавить проверку что нет повторяющихся url
     if isinstance(url_list, list):
         for url in url_list:
             if not bool(regex.search(url)):
@@ -158,12 +153,12 @@ def req_handler():
                             }
                         )
                     print (result_list)
-#                    return make_response(render_template("thumbnail_info.html"), 200)
                 if uploaded_images or any(f for f in uploaded_images):
                     for uploaded_image in uploaded_images:
                         file_name = uploaded_image.filename
-                        file_ext = os.path.splitext(file_name)[1]
-                        if file_name != "" and file_ext in application.config["UPLOAD_EXTENSIONS"]:
+                        #file_ext = os.path.splitext(file_name)[1]
+                        #and file_ext in application.config["UPLOAD_EXTENSIONS"]
+                        if file_name != "":
                             mime_type = get_image_mime(uploaded_image)
                             #тумб в базу и добавляем в JSON для рендера в thumbnail_info.html
                     return make_response(render_template("thumbnail_info.html"), 200)
@@ -179,24 +174,20 @@ def resource_error(exception):
     """Internal Error."""
     return jsonify(str(exception)), 500
 
-
 @application.errorhandler(405)
 def method_forbidden(exception):
     """Method Not Allowed."""
     return jsonify(str(exception)), 405
-
 
 @application.errorhandler(404)
 def resource_not_found(exception):
     """Page not found."""
     return jsonify(str(exception)), 404
 
-
 @application.errorhandler(403)
 def resource_forbidden(exception):
     """Forbidden."""
     return jsonify(str(exception)), 403
-
 
 if __name__ == "__main__":
     application.run(threaded=True)
