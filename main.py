@@ -6,7 +6,7 @@ import re
 import base64
 import magic
 import requests
-import secrets
+from secrets import token_urlsafe
 from PIL import Image
 from flask_xcaptcha import XCaptcha
 from flask_sqlalchemy import SQLAlchemy
@@ -42,7 +42,7 @@ def captcha_verify():
         return abort(500)
 
 def get_image_mime(stream):
-    """Get Mime Type from stream"""
+    """Get Mime Type"""
     try:
         mime = magic.from_buffer(stream.read(2048), mime=True)
         stream.seek(0)
@@ -52,7 +52,7 @@ def get_image_mime(stream):
         return abort(500)
 
 def image_to_object(image, image_format=None):
-    """Convert Image to Object"""
+    """Image to Object"""
     try:
         file_object = io.BytesIO()
         image.save(file_object, image_format)
@@ -70,9 +70,9 @@ def sort_urls_list(url_list):
 
 def generate_link():
     """Generate short link"""
-    link = secrets.token_urlsafe(8)
+    link = token_urlsafe(8)
     while thumbnail.query.filter(thumbnail.link == link).first():
-        link = secrets.token_urlsafe(8)
+        link = token_urlsafe(8)
     return link
 
 def is_valid_url(url_list):
