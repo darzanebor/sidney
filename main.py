@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
 """SIDNEY(COOKIE MONSTER) IMAGE MANAGER"""
-from io import BytesIO
 import os
 import io
 import re
 import base64
 import magic
 import requests
+import secrets
 from PIL import Image
 from flask_xcaptcha import XCaptcha
 from flask_sqlalchemy import SQLAlchemy
@@ -38,9 +38,7 @@ xcaptcha = XCaptcha(application)
 def captcha_verify():
     """Verify Captcha"""
     try:
-        if xcaptcha.verify():
-            return True
-        return False
+        return xcaptcha.verify()
     except:
         print("Error in captcha_verify()")
         return abort(500)
@@ -68,31 +66,23 @@ def image_to_object(image, image_format=None):
         print("Error in image_to_object()")
         return abort(500)
 
+def sort_urls_list(url_list):
+    """Sort urls list"""
+    if isinstance(url_list, list):
+        return sorted(set(url_list))
+    return url_list
 
-def image_check(image_url):
-    """Uploaded file checks"""
-    try:
-        headers = {"Range": "bytes=0-2048"}
-        req = requests.get(image_url, headers=headers, allow_redirects=True, timeout=5)
-        if req.status_code != 206:
-            abort(req.status_code)
-        content_length = int(req.headers.get("content-length", None))
-        content_type = req.headers.get("content-type")
-        image_head = BytesIO(req.content)
-        mime = get_image_mime(image_head)  # get mime type from uploaded file
-        if content_type != mime:
-            abort(403, "Content missmatch")
-        if content_length > application.config["COOKIE_IMAGE_MAX_SIZE"]:
-            abort(403, "Image is too large")
-        return True
-    except:
-        print("Error in image_check()")
-        return abort(500)
-
+def generate_link():
+    """Generate short link"""
+    link = secrets.token_urlsafe(8)
+    while thumbnail.query.filter(thumbnail.link == link).first():
+        link = secrets.token_urlsafe(8)
+    return link
 
 def is_valid_url(url_list):
     """Validate url by regexp"""
     regex = re.compile(r"^((http|https)?(:\D{2})).*$", re.IGNORECASE)
+    # добавить проверку что нет повторяющихся url
     if isinstance(url_list, list):
         for url in url_list:
             if not bool(regex.search(url)):
@@ -101,57 +91,86 @@ def is_valid_url(url_list):
         return bool(regex.search(url_list))
     return True
 
+def req_thumbnail(uploaded_url):
+    params = {'url':base64.b64encode(uploaded_url.encode())}
+    req = requests.get(
+        url=application.config["SIDNEY_COOKIE"],
+        params=params,
+        stream=True,
+        timeout=60
+    )
+    if req.status_code != 200:
+        return None
+    return [io.BytesIO(req.content), req.headers['Content-Length'], req.headers['X-Orig-Hash']]
 
 @application.route("/", methods=["GET", "POST"])
 def req_handler():
-    """GET/POST requests handler"""
-    try:
+#    """GET/POST requests handler"""
+#    try:
         if request.method == "GET":
-            thumbnail_id = request.args.get("thumbnail_id")
-            if thumbnail_id or thumbnail_id != "":
+            thumbnail_link = request.args.get("thumbnail_link")
+            if thumbnail_link or thumbnail_link != "":
                 # if redis_cache_enabled:
                 # load from redis cache
-                existing_thumbnail = thumbnail.query.filter(thumbnail.link == thumbnail_id).first()
+                existing_thumbnail = thumbnail.query.filter(thumbnail.link == thumbnail_link).first()
                 if existing_thumbnail:
                     view = request.args.get("view")
                     if view != "full":
-                        image = Image.open(existing_thumbnail.location)
+                        image = Image.open(existing_thumbnail.path)
                         return send_file(image_to_object(image, image.format), mimetype="*/*")
                     return make_response(render_template("thumbnail_info.html"), 200)
         if request.method == "POST":
-            if captcha_verify():
+#            if captcha_verify():
                 uploaded_images = request.files.getlist("image_file")
                 uploaded_urls = request.form.getlist("image_url")
                 if is_valid_url(uploaded_urls):
-                    for uploaded_url in uploaded_urls:
-                        params = {'url':base64.b64encode(uploaded_url.encode())}
-                        req = requests.get(
-                            url=application.config["SIDNEY_COOKIE"],
-                            params=params,
-                            stream=True,
-                            timeout=60
-                        )
-                        if req.status_code == 200:
-                            raw_image = Image.open(io.BytesIO(req.content))
-                            return_image = image_to_object(raw_image,raw_image.format)
-                            mime_type = Image.MIME[raw_image.format]
+                    result_list = []
+                    for uploaded_url in sort_urls_list(uploaded_urls):
 
-                            #тумб в базу и добавляем в JSON для рендера в thumbnail_info.html
-                    return make_response(render_template("thumbnail_info.html"), 200)
+                        existing_thumbnail = thumbnail.query.filter(thumbnail.url == uploaded_url).first()
+                        if existing_thumbnail:
+                            result_list.append(
+                                {
+                                    "url": existing_thumbnail.url,
+                                    "path": existing_thumbnail.path,
+                                    "link": existing_thumbnail.link,
+                                    "size": existing_thumbnail.size,
+                                    "mime": existing_thumbnail.mime,
+                                    "hash": existing_thumbnail.hash
+                                }
+                            )
+                            continue
+                        thumb_image, thumb_size, image_hash = req_thumbnail(uploaded_url)
+                        thumb_image = Image.open(thumb_image)
+                        mime_type = Image.MIME[thumb_image.format]                        
+                        # add to db but don't commit on each
+                        # save to file
+                        # тумб в базу и добавляем в JSON для рендера в thumbnail_info.html
+                        # ССЫЛКА МОЖЕТ ОТЛИЧАТСЯ А КАРТИНКА НЕТ
+                        result_list.append(
+                            {
+                                "url": uploaded_url,
+                                "path": 'somepath',
+                                "link": generate_link(),
+                                "size": thumb_size,
+                                "mime": mime_type,
+                                "hash": image_hash
+                            }
+                        )
+                    print (result_list)
+#                    return make_response(render_template("thumbnail_info.html"), 200)
                 if uploaded_images or any(f for f in uploaded_images):
                     for uploaded_image in uploaded_images:
                         file_name = uploaded_image.filename
                         file_ext = os.path.splitext(file_name)[1]
                         if file_name != "" and file_ext in application.config["UPLOAD_EXTENSIONS"]:
                             mime_type = get_image_mime(uploaded_image)
-
                             #тумб в базу и добавляем в JSON для рендера в thumbnail_info.html
-
                     return make_response(render_template("thumbnail_info.html"), 200)
         return make_response(render_template("index.html"), 200)
-    except:
-        print("Error in req_handler()")
-        return abort(404)
+#    except:
+#        print("Error in req_handler()")
+#        return abort(404)
     #GET #return send_file(return_image,mimetype=mime_type,as_attachment=False)
     #POST #return send_file(image_to_object(uploaded_image),mimetype=mime_type,as_attachment=False)
 
